@@ -1,0 +1,11 @@
+credentials/
+
+praw.ini
+
+__pycache__
+.sonarlint
+.vscode
+errors.log
+
+Notes
+scratch.py
