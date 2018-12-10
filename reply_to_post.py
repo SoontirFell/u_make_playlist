@@ -27,7 +27,12 @@ def response_generator(messages):
                     '\n\n The link above is to a Spotify playlist featuring every video linked within this thread as of ' +
                     current_time.strftime("%A") +
                     ", " + current_time.strftime("%B %d %Y") +
-                    ", " + current_time.strftime("%Y") + '.')
+                    ", " + current_time.strftime("%Y") +
+                    " at " + current_time.strftime("%I") +
+                    ":" + current_time.strftime("%M") +
+                    " " + current_time.strftime("%p") +
+                    " " + current_time.strftime("%Z") +
+                    '.')
 
 
 def get_playlist_url(submission):
@@ -51,4 +56,6 @@ def extract_spotify_urls(comment):
 
 
 def reply():
-    response_generator(reddit.inbox.unread(mark_read=True))
+    messages = list(reddit.inbox.unread())
+    response_generator(messages)
+    reddit.inbox.mark_read(messages)

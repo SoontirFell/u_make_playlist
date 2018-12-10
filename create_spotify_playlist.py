@@ -7,15 +7,15 @@ import requests
 # import toolz
 from credentials import spotify_credentials
 
-logging.basicConfig(filename='errors.log', level=logging.DEBUG,
+logging.basicConfig(filename='log.log', level=logging.DEBUG,
                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger(__name__)
 
 request_vars = {
-    'access_token': 'BQCh2dMHGMdzlAUDedA-OKYZa5gl-3WpBCv90vdt4kw8gTBFdL9axZonvpQ7V6-4ra7A-lPvKND47aCj5lWPSYga3O6n9MbP_e-O0hP3c63Ys_jzGaKeoEUgF9y-bdb7jtkV3_oohEvG-yE-Td54nAwkL08v4xOlBG85sp3TCe2vDheOJwpR0zlwidyqi9NIMdpL',
-    'expires_at': '1544275777017',
+    'access_token': 'BQD-4lZYkWV4hbQtqGeq6BY_RC_JIcKvi7tCca_2n6Nyaee78K1C2jZGfiZWrVfeeTj-6Y8drN9dm7ZoCQJw172hUL_fA9UEwDnqHvgSauQla2Y8Z0fFEQZckigR7OZDf3vXSMLSWyo4XHL1GlhPeTsRt5Nl-7NYAXzoAmpTXPr4haeUVeFa77r0u2QmoRQQOBUA',
+    'expires_at': '1544440207303',
     'redirect_url': 'https://localhost:8888/callback',
-    'refresh_token': 'AQBrjKr77maGymNdL7nsLH43-PJo0guiCIv6zivkHmlb5QrO5HiEptQHont5eiLeQCrPVvMwb7cvlOKH8llWfBmANUA8lwRlgwKyXeURBGOrJ0HiwoT-lMWKQIWSCoYIZvGqwQ',
+    'refresh_token': 'AQC5Sn-QP1DW_VhgVVZRQun0haVI3fmof6t7CXR-HvZfexjMri6IQwysyi0hObtdWkFWKObnUwsf433eCivewXC9VoUZCdsbcVRxX21_ww_uORTgXIsk0mcZdtL7OvsKh_7h_w',
     'scope': 'playlist-modify-public',
     'token_type': 'Bearer',
     'token_url': 'https://accounts.spotify.com/api/token'
@@ -26,7 +26,7 @@ def create_playlist(submission, spotify_urls, request_vars=request_vars):
     try:
         ensure_fresh_tokens(request_vars)
         playlist = instantiate_playlist(submission, request_vars)
-        track_ids = collect_track_ids(spotify_urls)
+        track_ids = collect_track_ids(spotify_urls, request_vars)
         add_to_playlist(playlist, track_ids, request_vars)
         return "https://open.spotify.com/playlist/" + playlist['id']
     except Exception as error:
@@ -104,15 +104,28 @@ def find_album_ids(link):
     return re.findall(r"(?<=album\/)[^\s?]*", link)
 
 
-def get_album_tracks(album_id):
-    return []
+def get_album_tracks(album_id, request_vars):
+    try:
+        headers = {
+            'Authorization': 'Bearer ' + request_vars['access_token'],
+            "content-type": "application/json"
+        }
+
+        limit = '50'
+
+        response = requests.request('GET', 'https://api.spotify.com/v1/albums/' +
+                                    album_id + '/tracks?limit=' + limit, headers=headers).json()
+
+        return list(map(lambda item: item['id'], response['items']))
+    except Exception as error:
+        return error
 
 
 def find_track_ids(link):
     return re.findall(r"(?<=track\/)[^\s?]*", link)
 
 
-def collect_track_ids(spotify_urls):
+def collect_track_ids(spotify_urls, request_vars):
     # print(spotify_urls)
     # playlist_ids = sum(
     #     list(map(lambda link: 'spotify:playlist:' + re.findall(r"(?<=playlist\/)[^\s?]*", link),
@@ -122,9 +135,11 @@ def collect_track_ids(spotify_urls):
     # print(playlist_ids)
     album_ids = sum(
         list(map(find_album_ids, list(filter(find_album_ids, spotify_urls)))), [])
+    album_tracks = sum(list(map(lambda album_id: get_album_tracks(album_id, request_vars), album_ids)), [])
+    print(album_tracks)
     # print(album_ids)
-    track_ids = sum(list(map(find_track_ids, list(
-        filter(find_track_ids, spotify_urls)))), list(map(get_album_tracks, album_ids)))
+    track_ids = sum(list(map(find_track_ids, list(filter(find_track_ids, spotify_urls)))),
+                    album_tracks)
     return track_ids
 
 
