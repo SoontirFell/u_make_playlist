@@ -20,7 +20,7 @@ def get_authorization():
     response_type = 'response_type=code'
     redirect_uri = 'redirect_uri=https://localhost:8888/callback'
     state = 'state=' + state_val
-    scope = 'scope=playlist-modify-public'
+    scope = 'scope=playlist-modify-public+playlist-read-private'
 
     print(base_url + '?' + client_id + '&' +
           response_type + '&' + redirect_uri + '&' + scope)

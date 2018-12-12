@@ -12,40 +12,39 @@ logging.basicConfig(filename='log.log', level=logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 request_vars = {
-    'access_token': 'BQD-4lZYkWV4hbQtqGeq6BY_RC_JIcKvi7tCca_2n6Nyaee78K1C2jZGfiZWrVfeeTj-6Y8drN9dm7ZoCQJw172hUL_fA9UEwDnqHvgSauQla2Y8Z0fFEQZckigR7OZDf3vXSMLSWyo4XHL1GlhPeTsRt5Nl-7NYAXzoAmpTXPr4haeUVeFa77r0u2QmoRQQOBUA',
-    'expires_at': '1544440207303',
+    'access_token': 'BQCweBT8_IxHnclYDzMyanvOv1p-gUh6aPK3gCxCr7qXaDQoMqalBd8zeqkPcvlgqa6JX-JsTDxJjcGeAz56MNl4YTw1sAd32aFK-WVhSRWzPou2Q0NayCz4Klsr_YnKhp2lwaWtcg_DOUbf2T_IbUnfiQFgcVhAxof94K37pHVu1VtHamxyf4Imy7HdhS6TZKae3-2IYqB_sdk',
+    'expires_at': '1544612856076',
     'redirect_url': 'https://localhost:8888/callback',
-    'refresh_token': 'AQC5Sn-QP1DW_VhgVVZRQun0haVI3fmof6t7CXR-HvZfexjMri6IQwysyi0hObtdWkFWKObnUwsf433eCivewXC9VoUZCdsbcVRxX21_ww_uORTgXIsk0mcZdtL7OvsKh_7h_w',
+    'refresh_token': 'AQACDGGISyKKXaQLgLNonCE8vrp624VErpTvqZHo_PHCVhn8PHd5IgpGay7I7Jqd_ygMCNaZB2tL8rlM5PpL-G5dLdCvVipBC4DeATCT-TMssbovmDjyljy0u2G5zvjD_RJ7QA',
     'scope': 'playlist-modify-public',
     'token_type': 'Bearer',
     'token_url': 'https://accounts.spotify.com/api/token'
 }
 
 
-def create_playlist(submission, spotify_urls, request_vars=request_vars):
+def create_playlist(submission, spotify_urls):
     try:
-        ensure_fresh_tokens(request_vars)
-        playlist = instantiate_playlist(submission, request_vars)
-        track_ids = collect_track_ids(spotify_urls, request_vars)
-        add_to_playlist(playlist, track_ids, request_vars)
+        ensure_fresh_tokens()
+        playlist = get_playlist(submission)
+        track_ids = collect_track_ids(spotify_urls)
+        add_to_playlist(playlist, track_ids)
         return "https://open.spotify.com/playlist/" + playlist['id']
     except Exception as error:
-        logger.error(error)
-        raise Exception
+        handle_error(error)
 
 
-def ensure_fresh_tokens(request_vars):
+def ensure_fresh_tokens():
     try:
         current_utc_ms = int(
             round(datetime.datetime.utcnow().timestamp() * 1000))
 
         if ((current_utc_ms + 600000) >= int(request_vars['expires_at'])):
-            get_new_tokens(request_vars)
+            get_new_tokens()
     except Exception as error:
-        return error
+        handle_error(error)
 
 
-def get_new_tokens(request_vars):
+def get_new_tokens():
     try:
         base_url = 'https://accounts.spotify.com/api/token'
 
@@ -69,10 +68,44 @@ def get_new_tokens(request_vars):
         request_vars['expires_at'] = str(int(round(datetime.datetime.utcnow().timestamp()
                                                    * 1000)) + response['expires_in'])
     except Exception as error:
-        return error
+        handle_error(error)
 
 
-def instantiate_playlist(submission, request_vars):
+def get_playlist(submission):
+    playlist = check_for_existing_playlist(submission)
+
+    if (playlist is None):
+        playlist = instantiate_playlist(submission)
+
+    return playlist
+
+
+def check_for_existing_playlist(submission, index = 0):
+    try:
+        headers = {
+            'Authorization': 'Bearer ' + request_vars['access_token'],
+            "content-type": "application/json"
+        }
+
+        limit = '50'
+
+        response = requests.request('GET', 'https://api.spotify.com/v1/me/playlists?limit=' + limit + '&offset=' + str(index), headers=headers).json()
+
+        for playlist in response['items']:
+            if (submission.title == playlist['name']):
+                return playlist
+
+        index += 50
+
+        if (index < response['total']):
+            return check_for_existing_playlist(submission, index)
+
+        return None
+    except Exception as error:
+        handle_error(error)
+
+
+def instantiate_playlist(submission):
     try:
         user_id = requests.get('https://api.spotify.com/v1/me', headers={
             'Authorization': 'Bearer ' + request_vars['access_token']
@@ -93,18 +126,14 @@ def instantiate_playlist(submission, request_vars):
         return requests.request('POST', 'https://api.spotify.com/v1/users/' +
                                 user_id + '/playlists', json=body, headers=headers).json()
     except Exception as error:
-        return error
-
-
-# def find_playlist_ids(link):
-#     return re.findall(r"(?<=playlist\/)[^\s?]*", link)
+        handle_error(error)
 
 
 def find_album_ids(link):
     return re.findall(r"(?<=album\/)[^\s?]*", link)
 
 
-def get_album_tracks(album_id, request_vars):
+def get_album_tracks(album_id):
     try:
         headers = {
             'Authorization': 'Bearer ' + request_vars['access_token'],
@@ -118,43 +147,68 @@ def get_album_tracks(album_id, request_vars):
 
         return list(map(lambda item: item['id'], response['items']))
     except Exception as error:
-        return error
+        handle_error(error)
 
 
 def find_track_ids(link):
     return re.findall(r"(?<=track\/)[^\s?]*", link)
 
 
-def collect_track_ids(spotify_urls, request_vars):
-    # print(spotify_urls)
-    # playlist_ids = sum(
-    #     list(map(lambda link: 'spotify:playlist:' + re.findall(r"(?<=playlist\/)[^\s?]*", link),
-    #              list(filter(lambda link: re.findall(
-    #                  r"(?<=playlist\/)[^\s?]*", link), spotify_urls))
-    #              )), [])
-    # print(playlist_ids)
+def collect_track_ids(spotify_urls):
     album_ids = sum(
         list(map(find_album_ids, list(filter(find_album_ids, spotify_urls)))), [])
-    album_tracks = sum(list(map(lambda album_id: get_album_tracks(album_id, request_vars), album_ids)), [])
-    print(album_tracks)
-    # print(album_ids)
+    album_tracks = sum(list(map(get_album_tracks, album_ids)), [])
     track_ids = sum(list(map(find_track_ids, list(filter(find_track_ids, spotify_urls)))),
                     album_tracks)
     return track_ids
 
 
-def add_to_playlist(playlist, track_ids, request_vars):
+def add_to_playlist(playlist, track_ids):
     try:
         headers = {
             'Authorization': 'Bearer ' + request_vars['access_token'],
             "content-type": "application/json"
         }
 
+        deuplicated_track_ids = deuplicate_tracks(playlist, track_ids)
+
         body = {
-            "uris": list(map(lambda id: 'spotify:track:' + id, track_ids))
+            "uris": list(map(lambda id: 'spotify:track:' + id, deuplicated_track_ids))
         }
 
         return requests.request('POST', 'https://api.spotify.com/v1/playlists/' +
                                 playlist['id'] + '/tracks', json=body, headers=headers).json()
     except Exception as error:
-        return error
+        handle_error(error)
+
+
+def deuplicate_tracks(playlist, track_ids):
+    existing_playlist_track_ids = get_playlist_tracks(playlist)
+
+    return list(filter(lambda track_id: track_id not in existing_playlist_track_ids, track_ids))
+
+
+def get_playlist_tracks(playlist, index = 0):
+    try:
+        headers = {
+            'Authorization': 'Bearer ' + request_vars['access_token'],
+            "content-type": "application/json"
+        }
+
+        response = requests.request('GET', playlist['tracks']['href'] + '?limit=100&offset=' + str(index), headers=headers).json()
+        playlist_tracks = response['items']
+
+        index+=100
+
+        if (index < response['total']):
+            return get_playlist_tracks(playlist, index)
+
+        return list(map(lambda item: item['track']['id'], playlist_tracks))
+
+    except Exception as error:
+        handle_error(error)
+
+
+def handle_error(error):
+    logger.error(error)
+    raise Exception
